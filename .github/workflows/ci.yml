@@ -1,0 +1,23 @@
+name: Agent CI Gates
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  test-and-validate-evals:
+    runs-on: ubuntu-latest
+    env:
+      SEED_OFFLINE_MODE: "1"
+      SEED_PACK: t07
+      GEMINI_MODEL: gemini-3.8-flash
+      GOOGLE_CLOUD_LOCATION: global
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.12"
+      - name: Install, offline tests, eval schema check
+        run: |
+          make setup
+          make test
+          make eval-validate PACK=t07
