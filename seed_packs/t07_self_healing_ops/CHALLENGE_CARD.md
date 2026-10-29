@@ -17,8 +17,10 @@
 
 ### Ready-Made BigQuery Tools (`TOOLS` in `tools.py`)
 - `query_active_incidents` (BigQuery read tool in `tools.py`)
+- `correlate_incident` (BigQuery 3-table JOIN tool in `tools.py`)
 - `inspect_deployment_release` (BigQuery read tool in `tools.py`)
 - `lookup_slo_runbook` (BigQuery read tool in `tools.py`)
+- `notify_travel_concierge` (A2A advisory tool to Table 8 in `tools.py`)
 
 ### Mock Action APIs (`mcp_server.py` & `ACTION_TOOLS` in `tools.py`)
 - `execute_canary_rollback` (FastMCP stdio tool in `mcp_server.py` & `ACTION_TOOLS` in `tools.py`)

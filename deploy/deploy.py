@@ -171,7 +171,11 @@ def deploy_agent(
         "ENABLE_MCP_STDIO": "0",
         "AGENT_RUNTIME_DEPLOY": "1",
         # Tribe A2A handshake target (Table 8 Travel Concierge); unset = advisories recorded locally only.
-        "T08_AGENT_URL": resolve_env_config("T08_AGENT_URL", default=""),
+        "T08_AGENT_URL": (
+            os.environ["T08_AGENT_URL"].strip()
+            if "T08_AGENT_URL" in os.environ
+            else resolve_env_config("T08_AGENT_URL", default="")
+        ),
     }
     # Agent Runtime rejects env vars with empty values (400 "Required field is not set").
     env_vars = {key: value for key, value in env_vars.items() if value != ""}
