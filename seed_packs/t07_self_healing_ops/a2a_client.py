@@ -17,6 +17,11 @@ from a2a.client import ClientConfig, ClientFactory
 import a2a.types as a2a_types
 
 
+def _client_timeout(timeout_s: float) -> httpx.Timeout:
+    """Total budget `timeout_s`, but a blackholed endpoint must fail at connect within 5 s."""
+    return httpx.Timeout(float(timeout_s), connect=min(5.0, float(timeout_s)))
+
+
 def _unwrap(obj: Any) -> Any:
     """`StreamResponse` / `SendMessageResponse` carry their payload in a protobuf oneof (task | message)."""
     has_field = getattr(obj, "HasField", None)
@@ -62,7 +67,7 @@ async def send_a2a_text(
     Returns an empty string when the agent replied without any text part.
     """
     own_client = httpx_client is None
-    http = httpx_client or httpx.AsyncClient(timeout=timeout_s)
+    http = httpx_client or httpx.AsyncClient(timeout=_client_timeout(timeout_s))
     try:
         async def _exchange() -> str:
             factory = ClientFactory(ClientConfig(streaming=False, httpx_client=http))

@@ -58,3 +58,10 @@ def test_omitted_arg_is_filled_from_tool_default_before_matching():
     assert score_tool_trajectory(exp, act, defaults=defaults) == 0.0
     assert score_tool_trajectory([{"name": "annotate", "args": {"new_status": "MITIGATED"}}], act, defaults=defaults) == 1.0
     assert score_tool_trajectory(exp, act) == 1.0  # legacy lenient behaviour when no defaults are supplied
+
+
+def test_version_like_decimals_are_not_numerically_coerced():
+    from eval.run_eval import _normalize_arg
+
+    assert _normalize_arg("2.10") != _normalize_arg("2.1")  # version-like strings compare as text
+    assert _normalize_arg("12") == _normalize_arg(12) == _normalize_arg(12.0) == _normalize_arg("12.0")

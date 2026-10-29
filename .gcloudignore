@@ -1,3 +1,4 @@
+#!include:.gitignore
 # Files excluded from `gcloud builds submit` and `gcloud run deploy --source` uploads.
 # tests/ is intentionally NOT excluded: cloudbuild.yaml runs pytest.
 .git/

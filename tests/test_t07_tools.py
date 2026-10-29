@@ -135,3 +135,55 @@ def test_correlate_incident_requires_incident_id():
 
     param = inspect.signature(correlate_incident).parameters["incident_id"]
     assert param.default is inspect.Parameter.empty  # a default would let the model silently triage INC-0001
+
+
+def test_notify_records_outcome_on_the_advisory(monkeypatch: pytest.MonkeyPatch, _state: Path):
+    monkeypatch.delenv("T08_AGENT_URL", raising=False)
+    asyncio.run(t07tools.notify_travel_concierge("INC-0001", "checkout-payment-svc", "x"))
+    assert json.loads((_state / "state.json").read_text())["advisories"][0]["status"] == "SKIPPED"
+
+    async def ok(*_a, **_k):
+        return "ack"
+
+    monkeypatch.setattr(t07tools, "send_a2a_text", ok)
+    monkeypatch.setenv("T08_AGENT_URL", "http://t08.test")
+    asyncio.run(t07tools.notify_travel_concierge("INC-0001", "checkout-payment-svc", "x"))
+    assert json.loads((_state / "state.json").read_text())["advisories"][1]["status"] == "SENT"
+
+
+def test_split_joined_bigquery_row_and_policy_types():
+    from seed_packs.t07_self_healing_ops.tools import _build_policy, _split_joined_row
+
+    row = {f"i_{c}": None for c in t07tools._INCIDENT_COLUMNS}
+    row.update({"i_incident_id": "INC-0007", "i_service_name": "auth-token-gateway", "i_status": "OPEN"})
+    row.update({f"r_{c}": None for c in t07tools._RELEASE_COLUMNS})
+    row.update({"r_release_id": "REL-0007", "r_previous_stable_version": "v2.16.0", "r_rollback_safe": True})
+    row.update({f"b_{c}": None for c in t07tools._RUNBOOK_COLUMNS})
+    row.update({"b_runbook_id": "RBK-017", "b_min_safe_replicas": 3, "b_max_safe_replicas": 40,
+                "b_recommended_action": "ROLLBACK_TO_PREVIOUS_STABLE"})
+    incident, release, runbook = _split_joined_row(row)
+    assert (incident["incident_id"], release["release_id"], runbook["runbook_id"]) == ("INC-0007", "REL-0007", "RBK-017")
+    assert _build_policy(release, runbook) == {
+        "allowed_rollback_target": "v2.16.0",
+        "rollback_safe": True,  # BigQuery BOOL, not the CSV "True" string
+        "replica_corridor": {"min": 3, "max": 40},
+        "recommended_action": "ROLLBACK_TO_PREVIOUS_STABLE",
+    }
+    assert _split_joined_row({f"i_{c}": None for c in t07tools._INCIDENT_COLUMNS})[1:] == (None, None)
+
+
+def test_a2a_client_import_fallback_logs_a_warning(monkeypatch: pytest.MonkeyPatch, caplog):
+    import importlib
+    import logging
+    import sys
+
+    monkeypatch.setitem(sys.modules, "seed_packs.t07_self_healing_ops.a2a_client", None)  # forces ImportError
+    with caplog.at_level(logging.WARNING):
+        importlib.reload(t07tools)
+    try:
+        assert t07tools.send_a2a_text is None
+        assert any("a2a" in rec.getMessage().lower() for rec in caplog.records), [r.getMessage() for r in caplog.records]
+    finally:
+        monkeypatch.delitem(sys.modules, "seed_packs.t07_self_healing_ops.a2a_client", raising=False)
+        importlib.reload(t07tools)
+    assert callable(t07tools.send_a2a_text)

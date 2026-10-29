@@ -164,11 +164,25 @@ def record_advisory(record: dict[str, Any]) -> dict[str, Any]:
     stored = {
         "advisory_id": f"ADV-{4001 + len(advisories)}",
         **record,
-        "dispatched_at": datetime.now(timezone.utc).isoformat(),
+        "status": "RECORDED",
+        "recorded_at": datetime.now(timezone.utc).isoformat(),
     }
     advisories.append(stored)
     _save_state(state)
     return stored
+
+
+def update_advisory_status(advisory_id: str, status: str, detail: str = "") -> dict[str, Any] | None:
+    """Record the delivery outcome (SENT / SKIPPED / ERROR) of an advisory; returns the updated record."""
+    state = _load_state()
+    for stored in state.get("advisories", []):
+        if stored.get("advisory_id") == advisory_id:
+            stored["status"] = status.strip().upper()
+            stored["outcome_detail"] = detail
+            stored["updated_at"] = datetime.now(timezone.utc).isoformat()
+            _save_state(state)
+            return stored
+    return None
 
 
 ACTION_TOOLS = [

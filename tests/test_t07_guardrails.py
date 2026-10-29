@@ -152,3 +152,34 @@ def test_guardrail_rejection_is_logged_for_cloud_logging(caplog):
         )
     messages = [rec.getMessage() for rec in caplog.records]
     assert any("GUARDRAIL_REJECTED" in m and res["guardrail_event_id"] in m for m in messages), messages
+
+
+# ---------------------------------------------------------------------------
+# Minor fix pass: corridor over all runbooks, informative fail-closed reason
+# ---------------------------------------------------------------------------
+
+
+def test_scale_corridor_uses_all_runbooks_not_the_lookup_limit(monkeypatch: pytest.MonkeyPatch):
+    from seed_packs.t07_self_healing_ops import tools as t07tools
+
+    calls: list[str] = []
+    real = t07tools.service_replica_corridor
+
+    def spy(service: str):
+        calls.append(service)
+        return real(service)
+
+    monkeypatch.setattr(guardrails, "service_replica_corridor", spy)
+    args = {"service_name": "auth-token-gateway", "cluster_region": "europe-west1", "target_replicas": 12}
+    assert before_tool_callback(_Tool("scale_service_replicas"), args, None) is None
+    assert calls == ["auth-token-gateway"]
+    assert real("auth-token-gateway") == {"min": 3, "max": 40}
+    assert real("ghost-svc") is None
+
+
+def test_fail_closed_reason_includes_upstream_error(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(
+        guardrails, "correlate_incident", lambda _id: json.dumps({"status": "ERROR", "error": "bq exploded"})
+    )
+    res = before_tool_callback(_Tool("execute_canary_rollback"), _rb(), None)
+    assert res["status"] == "REJECTED_BY_GUARDRAIL" and "bq exploded" in res["reason"]

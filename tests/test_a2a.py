@@ -58,6 +58,7 @@ def test_a2a_round_trip_against_local_echo_agent(echo_server):
 def test_a2a_server_builds_app_and_serves_agent_card(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("SEED_OFFLINE_MODE", "1")
     monkeypatch.setenv("A2A_PUBLIC_URL", "https://t07.example.run.app")
+    monkeypatch.setenv("SEED_PACK", "t07")  # do not rely on the ambient environment
     import a2a_server
 
     importlib.reload(a2a_server)
@@ -67,3 +68,11 @@ def test_a2a_server_builds_app_and_serves_agent_card(monkeypatch: pytest.MonkeyP
     # A2A v1.0 card schema (a2a-sdk 1.x): the RPC endpoint lives under supportedInterfaces.
     assert card["supportedInterfaces"][0]["url"].startswith("https://t07.example.run.app")
     assert card["supportedInterfaces"][0]["protocolBinding"] == "JSONRPC"
+
+
+def test_client_timeout_bounds_connect_separately():
+    from seed_packs.t07_self_healing_ops.a2a_client import _client_timeout
+
+    t = _client_timeout(90)
+    assert t.connect == 5.0 and t.read == 90.0
+    assert _client_timeout(3).connect == 3.0

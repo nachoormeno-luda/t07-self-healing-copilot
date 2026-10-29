@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+import logging
 import os
 import re
 from pathlib import Path
@@ -16,14 +17,22 @@ from seed_packs.t07_self_healing_ops.mcp_server import (
     execute_canary_rollback,
     record_advisory,
     scale_service_replicas,
+    update_advisory_status,
 )
+
+logger = logging.getLogger(__name__)
 
 try:  # a2a-sdk ships with google-adk[a2a]; degrade to an ERROR status rather than fail the whole tool module.
     # Pack-local import on purpose: importing anything from `app` here would recurse through
     # app/__init__.py -> app.agent -> loader -> this module (see tests/test_t07_import_order.py).
     from seed_packs.t07_self_healing_ops.a2a_client import send_a2a_text
-except ImportError:  # pragma: no cover - only when the A2A extra is missing
+except ImportError as _a2a_exc:
     send_a2a_text = None  # type: ignore[assignment]
+    logger.warning(
+        "A2A client unavailable (%s): notify_travel_concierge will return status ERROR. "
+        "Install google-adk[a2a] / a2a-sdk==1.3.0.",
+        _a2a_exc,
+    )
 
 _DATA_DIR = Path(__file__).resolve().parent / "data"
 _DEFAULT_DATASET = "seed_t07"
@@ -413,6 +422,46 @@ def lookup_slo_runbook(
     })
 
 
+def service_replica_corridor(service_name: str) -> dict[str, int] | None:
+    """Strictest replica corridor across ALL of a service's runbooks (BigQuery aggregate, CSV fallback).
+
+    Not an ADK tool: used by the guardrails so the corridor never depends on `lookup_slo_runbook`'s
+    row limit or ordering. Returns None when the service has no runbook (= no policy = refuse).
+    """
+    svc_clean = (service_name or "").strip()
+    if not svc_clean:
+        return None
+    project, dataset = _resolve_project_and_dataset()
+    use_offline = os.environ.get("SEED_OFFLINE_MODE", "").lower() in {"1", "true", "yes"}
+    if project and not use_offline:
+        try:
+            client = bigquery.Client(project=project)
+            sql = (
+                f"SELECT MAX(min_safe_replicas) AS lo, MIN(max_safe_replicas) AS hi, COUNT(*) AS n "
+                f"FROM `{project}.{dataset}.slo_runbooks` WHERE LOWER(service_name) = LOWER(@svc)"
+            )
+            cfg = bigquery.QueryJobConfig(
+                query_parameters=[bigquery.ScalarQueryParameter("svc", "STRING", svc_clean)]
+            )
+            rows = [dict(r.items()) for r in client.query(sql, job_config=cfg).result()]
+            if rows and _to_int(rows[0].get("n")):
+                lo, hi = _to_int(rows[0].get("lo")), _to_int(rows[0].get("hi"))
+                if lo is not None and hi is not None:
+                    return {"min": lo, "max": hi}
+            return None
+        except Exception as exc:
+            logger.warning("service_replica_corridor: BigQuery failed (%s); using bundled CSV", exc)
+    rows = [
+        b for b in _read_local_csv("slo_runbooks") if b["service_name"].lower() == svc_clean.lower()
+    ]
+    if not rows:
+        return None
+    return {
+        "min": max(int(float(b["min_safe_replicas"])) for b in rows),
+        "max": min(int(float(b["max_safe_replicas"])) for b in rows),
+    }
+
+
 async def notify_travel_concierge(
     incident_id: str,
     service_name: str,
@@ -450,12 +499,14 @@ async def notify_travel_concierge(
             "target_agent_url": target or None,
         })
         if not target:
+            record = update_advisory_status(record["advisory_id"], "SKIPPED", "T08_AGENT_URL not set") or record
             return json.dumps({
                 "status": "SKIPPED",
                 "reason": "T08_AGENT_URL is not set; advisory recorded locally only",
                 "advisory": record,
             })
         if send_a2a_text is None:
+            record = update_advisory_status(record["advisory_id"], "ERROR", "a2a client unavailable") or record
             return json.dumps({
                 "status": "ERROR",
                 "error": "A2A client unavailable (a2a-sdk not installed)",
@@ -469,10 +520,17 @@ async def notify_travel_concierge(
         )
         # A real concierge round trip (Gemini + BigQuery on the other side) takes well over 20 s.
         reply = await send_a2a_text(target, text, timeout_s=90)
+        record = update_advisory_status(record["advisory_id"], "SENT", (reply or "")[:200]) or record
         return json.dumps({"status": "SUCCESS", "advisory": record, "concierge_reply": (reply or "")[:500]})
     except Exception as exc:
         # Include the type: asyncio.TimeoutError and friends stringify to "".
-        return json.dumps({"status": "ERROR", "error": f"{type(exc).__name__}: {exc}", "advisory": record})
+        error = f"{type(exc).__name__}: {exc}"
+        if record:
+            try:
+                record = update_advisory_status(record["advisory_id"], "ERROR", error) or record
+            except Exception:  # audit update must never mask the original error
+                pass
+        return json.dumps({"status": "ERROR", "error": error, "advisory": record})
 
 
 TOOLS = [
