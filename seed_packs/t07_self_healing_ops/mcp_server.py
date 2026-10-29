@@ -141,6 +141,22 @@ def annotate_incident_timeline(
     return json.dumps({"status": "SUCCESS", "annotation": record, "state_backend": backend})
 
 
+def record_guardrail_event(tool_name: str, args: dict[str, Any], reason: str) -> dict[str, Any]:
+    """Persist a refused action under `guardrail_events` (audit trail; not an MCP tool)."""
+    state = _load_state()
+    events = state.setdefault("guardrail_events", [])
+    record = {
+        "event_id": f"GUARD-{5001 + len(events)}",
+        "tool": tool_name,
+        "args": args,
+        "reason": reason,
+        "recorded_at": datetime.now(timezone.utc).isoformat(),
+    }
+    events.append(record)
+    _save_state(state)
+    return record
+
+
 ACTION_TOOLS = [
     execute_canary_rollback,
     scale_service_replicas,

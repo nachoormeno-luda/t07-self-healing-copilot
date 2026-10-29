@@ -132,6 +132,8 @@ class LoadedSeedPack:
     pack_dir: Path | None
     tools: list[Any] = field(default_factory=list)
     mcp_stdio_attached: bool = False
+    # Optional ADK before_tool_callback exported by the pack's `guardrails` module.
+    before_tool_callback: Callable[..., Any] | None = None
 
 
 def resolve_pack_directory(pack_id: str, seed_packs_dir: Path = SEED_PACKS_DIR) -> Path:
@@ -193,6 +195,29 @@ def _extract_mcp_module_functions(mcp_module_path: str) -> list[Callable[..., An
         mcp_module_path,
     )
     return []
+
+
+def _load_guardrail_callback(module_path: str) -> Callable[..., Any] | None:
+    """Import the pack's `guardrails` module and return its `before_tool_callback` (or None).
+
+    Raises:
+        ImportError: if the module declared in `pack.yaml` cannot be imported.
+    """
+    try:
+        mod = importlib.import_module(module_path)
+    except Exception as exc:
+        raise ImportError(
+            f"pack.yaml declares guardrails '{module_path}' but it failed to import "
+            f"({type(exc).__name__}: {exc}). Fix the module or remove `guardrails` from pack.yaml."
+        ) from exc
+    callback = vars(mod).get("before_tool_callback")
+    if callback is None or not callable(callback):
+        logger.warning(
+            "guardrails '%s' does not export a callable `before_tool_callback`; no guardrail attached.",
+            module_path,
+        )
+        return None
+    return callback
 
 
 def _build_mcp_stdio_toolset(mcp_module_path: str) -> Any | None:
@@ -303,6 +328,10 @@ def load_seed_pack(
     mcp_funcs = _extract_mcp_module_functions(mcp_server_str) if mcp_server_str else []
     mcp_func_names = {fn.__name__ for fn in mcp_funcs}
 
+    guardrails_mod = raw_cfg.get("guardrails")
+    guardrails_str = str(guardrails_mod).strip() if guardrails_mod else None
+    before_tool_callback = _load_guardrail_callback(guardrails_str) if guardrails_str else None
+
     use_stdio = _should_use_mcp_stdio(enable_mcp_stdio)
     final_tools: list[Any] = []
     mcp_attached = False
@@ -339,4 +368,5 @@ def load_seed_pack(
         pack_dir=pack_dir,
         tools=final_tools,
         mcp_stdio_attached=mcp_attached,
+        before_tool_callback=before_tool_callback,
     )
