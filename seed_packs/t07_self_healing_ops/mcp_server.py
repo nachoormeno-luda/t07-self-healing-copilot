@@ -157,6 +157,20 @@ def record_guardrail_event(tool_name: str, args: dict[str, Any], reason: str) ->
     return record
 
 
+def record_advisory(record: dict[str, Any]) -> dict[str, Any]:
+    """Persist an A2A service-health advisory under `advisories` (audit trail; not an MCP tool)."""
+    state = _load_state()
+    advisories = state.setdefault("advisories", [])
+    stored = {
+        "advisory_id": f"ADV-{4001 + len(advisories)}",
+        **record,
+        "dispatched_at": datetime.now(timezone.utc).isoformat(),
+    }
+    advisories.append(stored)
+    _save_state(state)
+    return stored
+
+
 ACTION_TOOLS = [
     execute_canary_rollback,
     scale_service_replicas,

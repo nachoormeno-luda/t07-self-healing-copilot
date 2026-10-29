@@ -1,11 +1,17 @@
-"""Offline tests for the Table 7 Seed Pack tools (correlate_incident JOIN tool, untrusted-log flagging)."""
+"""Offline tests for the Table 7 Seed Pack tools (correlate_incident JOIN tool, untrusted-log flagging,
+notify_travel_concierge A2A advisory)."""
 
 from __future__ import annotations
 
+import asyncio
 import json
+from pathlib import Path
 
+import httpx
 import pytest
 
+from seed_packs.t07_self_healing_ops import mcp_server
+from seed_packs.t07_self_healing_ops import tools as t07tools
 from seed_packs.t07_self_healing_ops.tools import (
     TOOLS,
     correlate_incident,
@@ -55,10 +61,70 @@ def test_query_active_incidents_marks_untrusted_snippet():
     assert flag_untrusted_text("ERROR upstream timeout after 3723ms") is False
 
 
-def test_correlate_incident_is_registered():
+def test_tools_are_registered_in_order():
     assert [t.__name__ for t in TOOLS] == [
         "query_active_incidents",
         "correlate_incident",
         "inspect_deployment_release",
         "lookup_slo_runbook",
+        "notify_travel_concierge",
     ]
+
+
+# ---------------------------------------------------------------------------
+# notify_travel_concierge — A2A advisory to Table 8 (Task 8)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def _state(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    monkeypatch.setattr(mcp_server, "_DEFAULT_STATE_PATH", tmp_path / "state.json")
+    monkeypatch.setattr(mcp_server, "_FALLBACK_STATE_PATH", tmp_path / "fb.json")
+    return tmp_path
+
+
+def test_notify_sends_advisory_and_returns_reply(monkeypatch: pytest.MonkeyPatch, _state: Path):
+    sent: dict[str, str] = {}
+
+    async def fake_send(agent_url, text, *, timeout_s=30.0, httpx_client=None):
+        sent["url"], sent["text"] = agent_url, text
+        return "ack: rebooking 3 travellers"
+
+    monkeypatch.setattr(t07tools, "send_a2a_text", fake_send)
+    monkeypatch.setenv("T08_AGENT_URL", "http://t08.test")
+    out = json.loads(
+        asyncio.run(t07tools.notify_travel_concierge("INC-0001", "checkout-payment-svc", "payment checkouts timing out"))
+    )
+    assert out["status"] == "SUCCESS" and out["concierge_reply"].startswith("ack")
+    assert out["advisory"]["advisory_id"] == "ADV-4001" and out["advisory"]["advisory_level"] == "DEGRADED"
+    assert sent["url"] == "http://t08.test" and "incident_id=INC-0001" in sent["text"]
+    state = json.loads((_state / "state.json").read_text())
+    assert state["advisories"][0]["advisory_id"] == "ADV-4001"
+
+
+def test_notify_skips_without_endpoint_and_never_raises(monkeypatch: pytest.MonkeyPatch, _state: Path):
+    monkeypatch.delenv("T08_AGENT_URL", raising=False)
+    out = json.loads(asyncio.run(t07tools.notify_travel_concierge("INC-0001", "checkout-payment-svc", "x")))
+    assert out["status"] == "SKIPPED" and out["advisory"]["advisory_id"] == "ADV-4001"
+
+    async def boom(*_a, **_k):
+        raise httpx.ConnectError("refused")
+
+    monkeypatch.setattr(t07tools, "send_a2a_text", boom)
+    monkeypatch.setenv("T08_AGENT_URL", "http://t08.test")
+    out2 = json.loads(asyncio.run(t07tools.notify_travel_concierge("INC-0001", "checkout-payment-svc", "x")))
+    assert out2["status"] == "ERROR" and "refused" in out2["error"]
+
+
+def test_notify_reports_timeouts_by_type_and_uses_a_realistic_timeout(monkeypatch: pytest.MonkeyPatch, _state: Path):
+    seen: dict[str, float] = {}
+
+    async def slow(agent_url, text, *, timeout_s=30.0, httpx_client=None):
+        seen["timeout_s"] = timeout_s
+        raise asyncio.TimeoutError()  # str() of this exception is empty
+
+    monkeypatch.setattr(t07tools, "send_a2a_text", slow)
+    monkeypatch.setenv("T08_AGENT_URL", "http://t08.test")
+    out = json.loads(asyncio.run(t07tools.notify_travel_concierge("INC-0001", "checkout-payment-svc", "x")))
+    assert out["status"] == "ERROR" and out["error"].startswith("TimeoutError")
+    assert seen["timeout_s"] >= 60  # a real agent round trip (Gemini + BigQuery) takes well over 20 s

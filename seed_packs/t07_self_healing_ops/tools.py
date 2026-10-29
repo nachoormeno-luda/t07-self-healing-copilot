@@ -14,8 +14,16 @@ from seed_packs.t07_self_healing_ops.mcp_server import (
     ACTION_TOOLS,
     annotate_incident_timeline,
     execute_canary_rollback,
+    record_advisory,
     scale_service_replicas,
 )
+
+try:  # a2a-sdk ships with google-adk[a2a]; degrade to an ERROR status rather than fail the whole tool module.
+    # Pack-local import on purpose: importing anything from `app` here would recurse through
+    # app/__init__.py -> app.agent -> loader -> this module (see tests/test_t07_import_order.py).
+    from seed_packs.t07_self_healing_ops.a2a_client import send_a2a_text
+except ImportError:  # pragma: no cover - only when the A2A extra is missing
+    send_a2a_text = None  # type: ignore[assignment]
 
 _DATA_DIR = Path(__file__).resolve().parent / "data"
 _DEFAULT_DATASET = "seed_t07"
@@ -405,11 +413,74 @@ def lookup_slo_runbook(
     })
 
 
+async def notify_travel_concierge(
+    incident_id: str,
+    service_name: str,
+    impact_summary: str,
+    estimated_recovery_minutes: int = 15,
+    advisory_level: str = "DEGRADED",
+) -> str:
+    """Send a service-health advisory to Table 8's Travel Concierge agent over A2A (Tribe handshake).
+
+    Args:
+        incident_id: Incident ID (e.g. 'INC-0001').
+        service_name: Degraded service (e.g. 'checkout-payment-svc', 'auth-token-gateway').
+        impact_summary: One-sentence customer-facing impact (e.g. 'payment checkouts are timing out').
+        estimated_recovery_minutes: Expected minutes until full recovery.
+        advisory_level: 'DEGRADED', 'OUTAGE' or 'MITIGATED'.
+
+    Returns:
+        JSON string with the recorded advisory (ADV- id) and the concierge's reply; status SKIPPED when
+        T08_AGENT_URL is not configured, ERROR when the call fails.
+    """
+    record: dict[str, Any] | None = None
+    try:
+        level = (advisory_level or "DEGRADED").strip().upper()
+        try:
+            minutes = int(float(estimated_recovery_minutes))
+        except (TypeError, ValueError):
+            minutes = 15
+        target = os.environ.get("T08_AGENT_URL", "").strip()
+        record = record_advisory({
+            "incident_id": (incident_id or "").strip(),
+            "service_name": (service_name or "").strip(),
+            "impact_summary": (impact_summary or "").strip(),
+            "estimated_recovery_minutes": minutes,
+            "advisory_level": level,
+            "target_agent_url": target or None,
+        })
+        if not target:
+            return json.dumps({
+                "status": "SKIPPED",
+                "reason": "T08_AGENT_URL is not set; advisory recorded locally only",
+                "advisory": record,
+            })
+        if send_a2a_text is None:
+            return json.dumps({
+                "status": "ERROR",
+                "error": "A2A client unavailable (a2a-sdk not installed)",
+                "advisory": record,
+            })
+        text = (
+            f"SERVICE HEALTH ADVISORY from Table 7 SRE Copilot. incident_id={record['incident_id']} "
+            f"service={record['service_name']} level={level} estimated_recovery_minutes={minutes}. "
+            f"Impact: {record['impact_summary']}. Please proactively handle affected bookings and reply "
+            "with your action."
+        )
+        # A real concierge round trip (Gemini + BigQuery on the other side) takes well over 20 s.
+        reply = await send_a2a_text(target, text, timeout_s=90)
+        return json.dumps({"status": "SUCCESS", "advisory": record, "concierge_reply": (reply or "")[:500]})
+    except Exception as exc:
+        # Include the type: asyncio.TimeoutError and friends stringify to "".
+        return json.dumps({"status": "ERROR", "error": f"{type(exc).__name__}: {exc}", "advisory": record})
+
+
 TOOLS = [
     query_active_incidents,
     correlate_incident,
     inspect_deployment_release,
     lookup_slo_runbook,
+    notify_travel_concierge,
 ]
 
 __all__ = [
@@ -420,6 +491,7 @@ __all__ = [
     "flag_untrusted_text",
     "inspect_deployment_release",
     "lookup_slo_runbook",
+    "notify_travel_concierge",
     "execute_canary_rollback",
     "scale_service_replicas",
     "annotate_incident_timeline",
