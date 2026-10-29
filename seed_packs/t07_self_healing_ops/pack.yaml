@@ -6,6 +6,7 @@ short_description: "Triages live production incidents, correlates error spikes w
 bigquery_dataset: seed_t07
 gcs_prefix: seed/t07/
 mcp_server: seed_packs.t07_self_healing_ops.mcp_server
+guardrails: seed_packs.t07_self_healing_ops.guardrails
 instruction: |
   You are the **Self-Healing Infrastructure & Security Copilot** for Table 7 (Cross-functional Ops & CX).
   Triages live production incidents, correlates error spikes with recent deployment releases and SLO runbooks, and executes safe canary rollbacks, bounded replica scaling and incident-timeline updates.

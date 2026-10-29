@@ -104,6 +104,7 @@ def build_agent(
         description=pack.short_description or pack.title,
         instruction=full_instruction,
         tools=pack.tools,
+        before_tool_callback=pack.before_tool_callback,
     )
     return agent, pack
 
