@@ -114,3 +114,17 @@ def test_notify_skips_without_endpoint_and_never_raises(monkeypatch: pytest.Monk
     monkeypatch.setenv("T08_AGENT_URL", "http://t08.test")
     out2 = json.loads(asyncio.run(t07tools.notify_travel_concierge("INC-0001", "checkout-payment-svc", "x")))
     assert out2["status"] == "ERROR" and "refused" in out2["error"]
+
+
+def test_notify_reports_timeouts_by_type_and_uses_a_realistic_timeout(monkeypatch: pytest.MonkeyPatch, _state: Path):
+    seen: dict[str, float] = {}
+
+    async def slow(agent_url, text, *, timeout_s=30.0, httpx_client=None):
+        seen["timeout_s"] = timeout_s
+        raise asyncio.TimeoutError()  # str() of this exception is empty
+
+    monkeypatch.setattr(t07tools, "send_a2a_text", slow)
+    monkeypatch.setenv("T08_AGENT_URL", "http://t08.test")
+    out = json.loads(asyncio.run(t07tools.notify_travel_concierge("INC-0001", "checkout-payment-svc", "x")))
+    assert out["status"] == "ERROR" and out["error"].startswith("TimeoutError")
+    assert seen["timeout_s"] >= 60  # a real agent round trip (Gemini + BigQuery) takes well over 20 s

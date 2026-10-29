@@ -17,7 +17,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.a2a_client import send_a2a_text  # noqa: E402
+from seed_packs.t07_self_healing_ops.a2a_client import send_a2a_text  # noqa: E402
 
 
 def main() -> int:

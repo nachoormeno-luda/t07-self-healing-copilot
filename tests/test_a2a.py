@@ -16,7 +16,7 @@ from google.adk.events import Event
 from google.genai import types
 from starlette.testclient import TestClient
 
-from app.a2a_client import send_a2a_text
+from seed_packs.t07_self_healing_ops.a2a_client import send_a2a_text
 
 
 class _EchoAgent(BaseAgent):

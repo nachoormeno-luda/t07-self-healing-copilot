@@ -18,9 +18,11 @@ from seed_packs.t07_self_healing_ops.mcp_server import (
     scale_service_replicas,
 )
 
-try:  # a2a-sdk ships with google-adk[a2a]; degrade to an ERROR status rather than fail the whole tool module
-    from app.a2a_client import send_a2a_text
-except Exception:  # pragma: no cover - only when the A2A extra is missing
+try:  # a2a-sdk ships with google-adk[a2a]; degrade to an ERROR status rather than fail the whole tool module.
+    # Pack-local import on purpose: importing anything from `app` here would recurse through
+    # app/__init__.py -> app.agent -> loader -> this module (see tests/test_t07_import_order.py).
+    from seed_packs.t07_self_healing_ops.a2a_client import send_a2a_text
+except ImportError:  # pragma: no cover - only when the A2A extra is missing
     send_a2a_text = None  # type: ignore[assignment]
 
 _DATA_DIR = Path(__file__).resolve().parent / "data"
@@ -465,10 +467,12 @@ async def notify_travel_concierge(
             f"Impact: {record['impact_summary']}. Please proactively handle affected bookings and reply "
             "with your action."
         )
-        reply = await send_a2a_text(target, text, timeout_s=20)
+        # A real concierge round trip (Gemini + BigQuery on the other side) takes well over 20 s.
+        reply = await send_a2a_text(target, text, timeout_s=90)
         return json.dumps({"status": "SUCCESS", "advisory": record, "concierge_reply": (reply or "")[:500]})
     except Exception as exc:
-        return json.dumps({"status": "ERROR", "error": str(exc), "advisory": record})
+        # Include the type: asyncio.TimeoutError and friends stringify to "".
+        return json.dumps({"status": "ERROR", "error": f"{type(exc).__name__}: {exc}", "advisory": record})
 
 
 TOOLS = [
