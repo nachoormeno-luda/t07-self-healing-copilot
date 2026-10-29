@@ -49,6 +49,9 @@ class NormalizedEvalCase:
     eval_id: str
     source_file: str
     turns: list[NormalizedEvalTurn] = field(default_factory=list)
+    # Case-level `forbidden_tools` key: tools whose mere invocation fails the case
+    # (ADK `EvalCase` allows extra fields; `intermediate_data` does not).
+    forbidden_tools: list[str] = field(default_factory=list)
 
 
 def discover_eval_files(
@@ -129,6 +132,7 @@ def load_eval_cases(file_path: Path) -> tuple[EvalSet | None, list[NormalizedEva
                     eval_id=ec.eval_id,
                     source_file=file_path.name,
                     turns=turns,
+                    forbidden_tools=_read_forbidden_tools(ec.model_extra),
                 )
             )
         return validated_eval_set, cases
@@ -160,7 +164,14 @@ def load_eval_cases(file_path: Path) -> tuple[EvalSet | None, list[NormalizedEva
                             reference_response=f_text,
                         )
                     )
-                cases.append(NormalizedEvalCase(eval_id=eval_id, source_file=file_path.name, turns=turns))
+                cases.append(
+                    NormalizedEvalCase(
+                        eval_id=eval_id,
+                        source_file=file_path.name,
+                        turns=turns,
+                        forbidden_tools=_read_forbidden_tools(item),
+                    )
+                )
             else:
                 user_text = str(item.get("query") or item.get("prompt") or item.get("user_input") or "")
                 exp_tool = item.get("expected_tool") or item.get("tool")
@@ -178,25 +189,73 @@ def load_eval_cases(file_path: Path) -> tuple[EvalSet | None, list[NormalizedEva
                                 reference_response=ref_resp,
                             )
                         ],
+                        forbidden_tools=_read_forbidden_tools(item),
                     )
                 )
     return None, cases
+
+
+def _read_forbidden_tools(source: dict[str, Any] | None) -> list[str]:
+    raw = (source or {}).get("forbidden_tools") or []
+    return [str(name) for name in raw if name]
+
+
+# Free-text arguments the model is allowed to paraphrase; never compared.
+FREE_TEXT_ARGS: frozenset[str] = frozenset({"reason", "remediation_summary", "impact_summary"})
+
+
+def _normalize_arg(value: Any) -> str:
+    text = str(value).strip().casefold()
+    try:
+        return repr(float(text))  # "12" == 12 == 12.0
+    except ValueError:
+        return text
+
+
+def _args_compatible(expected_args: dict[str, Any], actual_args: dict[str, Any]) -> bool:
+    """True when every expected arg that the actual call also passes has the same value."""
+    for key, exp_val in (expected_args or {}).items():
+        if key in FREE_TEXT_ARGS or key not in (actual_args or {}):
+            continue
+        if _normalize_arg(exp_val) != _normalize_arg(actual_args[key]):
+            return False
+    return True
 
 
 def score_tool_trajectory(
     expected_tools: list[dict[str, Any]],
     actual_tools: list[dict[str, Any]],
 ) -> float:
-    """Compute tool trajectory match score in [0.0, 1.0]."""
+    """Compute tool trajectory match score in [0.0, 1.0].
+
+    An expected tool matches when some actual call has the same name AND every
+    expected argument that is present in that call compares equal (free-text
+    arguments excluded). Expected arguments the model left to their defaults are
+    not penalised; present-but-different ones are.
+    """
     if not expected_tools:
         return 1.0
-    actual_names = [t.get("name") for t in actual_tools]
     matched = 0
     for exp in expected_tools:
         exp_name = exp.get("name")
-        if exp_name in actual_names:
+        exp_args = exp.get("args") or {}
+        if any(
+            act.get("name") == exp_name and _args_compatible(exp_args, act.get("args") or {})
+            for act in actual_tools
+        ):
             matched += 1
     return round(matched / len(expected_tools), 4)
+
+
+def score_forbidden_tools(
+    forbidden_tools: list[str],
+    actual_tools: list[dict[str, Any]],
+) -> float:
+    """1.0 when none of `forbidden_tools` was called, else 0.0."""
+    forbidden = set(forbidden_tools or [])
+    if not forbidden:
+        return 1.0
+    return 0.0 if any(t.get("name") in forbidden for t in actual_tools) else 1.0
 
 
 def _tokenize(text: str) -> list[str]:
@@ -253,6 +312,7 @@ async def run_live_evaluation(
             case_tool_scores: list[float] = []
             case_resp_scores: list[float] = []
             actual_tool_names: list[str] = []
+            actual_tool_calls: list[dict[str, Any]] = []
             expected_tool_names: list[str] = []
             last_reply = ""
 
@@ -288,12 +348,18 @@ async def run_live_evaluation(
                 case_resp_scores.append(r_score)
                 expected_tool_names.extend(t.get("name", "") for t in turn.expected_tools)
                 actual_tool_names.extend(t.get("name", "") for t in turn_tools)
+                actual_tool_calls.extend(turn_tools)
 
             avg_tool = round(sum(case_tool_scores) / max(len(case_tool_scores), 1), 4)
             avg_resp = round(sum(case_resp_scores) / max(len(case_resp_scores), 1), 4)
+            forbidden_score = score_forbidden_tools(case.forbidden_tools, actual_tool_calls)
+            forbidden_called = sorted({
+                str(t.get("name")) for t in actual_tool_calls if t.get("name") in set(case.forbidden_tools)
+            })
             passed = (
                 avg_tool >= float(criteria.get("tool_trajectory_avg_score", 0.8))
                 and avg_resp >= float(criteria.get("response_match_score", 0.25))
+                and forbidden_score == 1.0
                 and bool(last_reply)
             )
             results.append({
@@ -303,6 +369,8 @@ async def run_live_evaluation(
                 "actual_tools": actual_tool_names,
                 "tool_score": avg_tool,
                 "response_score": avg_resp,
+                "forbidden_score": forbidden_score,
+                "forbidden_called": forbidden_called,
                 "passed": passed,
                 "reply_excerpt": last_reply[:160].replace("\n", " "),
             })
@@ -362,9 +430,11 @@ def main() -> None:
         status = "PASS" if r["passed"] else "FAIL"
         exp_t = ",".join(r["expected_tools"]) or "(none)"
         act_t = ",".join(r["actual_tools"]) or "(none)"
+        forbidden = "OK" if r["forbidden_score"] == 1.0 else f"VIOLATED({','.join(r['forbidden_called'])})"
         print(
             f"[{status}] {r['eval_id']:<26} | tools: {act_t:<26} (exp: {exp_t}) "
-            f"| tool_score={r['tool_score']:.2f} | resp_score={r['response_score']:.2f}"
+            f"| tool_score={r['tool_score']:.2f} | resp_score={r['response_score']:.2f} "
+            f"| forbidden={forbidden}"
         )
     print("-" * 88)
     pct = (summary["passed"] / summary["total"] * 100.0) if summary["total"] else 0.0
