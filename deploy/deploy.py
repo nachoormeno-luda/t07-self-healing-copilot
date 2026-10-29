@@ -169,9 +169,11 @@ def deploy_agent(
         "SEED_BQ_DATASET": pack.bigquery_dataset or "",
         "ENABLE_MCP_STDIO": "0",
         "AGENT_RUNTIME_DEPLOY": "1",
-        # Tribe A2A handshake target (Table 8 Travel Concierge); empty = advisories recorded locally only.
+        # Tribe A2A handshake target (Table 8 Travel Concierge); unset = advisories recorded locally only.
         "T08_AGENT_URL": resolve_env_config("T08_AGENT_URL", default=""),
     }
+    # Agent Runtime rejects env vars with empty values (400 "Required field is not set").
+    env_vars = {key: value for key, value in env_vars.items() if value != ""}
 
     display_name = f"hackathon-{pack.pack_id}".replace("_", "-")
     description = f"AI Innovators Expedition Starter ({pack.title})"
