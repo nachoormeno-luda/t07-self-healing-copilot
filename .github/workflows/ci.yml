@@ -20,4 +20,5 @@ jobs:
         run: |
           make setup
           make test
+          .venv/bin/python seed_packs/check_packs.py
           make eval-validate PACK=t07

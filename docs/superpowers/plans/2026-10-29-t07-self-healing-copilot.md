@@ -1,6 +1,6 @@
 # T07 Self-Healing Infrastructure & Security Copilot — Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For Google Antigravity agents:** Follow the Plan → Act → Verify (Eval-First) loop in `.agents/rules/t07-sre-copilot.md` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Turn the starter into a scored, live-deployed SRE copilot that triages an incident with one BigQuery correlation query, enforces rollback/scaling policy *in code* (not only in the prompt), survives the INC-0019 log injection, proves all of it with an eval harness that checks tool arguments and forbidden tools, and talks to Table 8 over real A2A.
 
