@@ -32,7 +32,7 @@ STATE_FILE = REPO_ROOT / ".deployed_agent.json"
 # Pinned requirements matching the Python 3.12 workstation environment to
 # prevent cloudpickle deserialization skew inside Agent Runtime containers.
 PINNED_REQUIREMENTS = [
-    "google-adk==2.11.0",
+    "google-adk[a2a]==2.11.0",  # [a2a] extra: a2a-sdk for notify_travel_concierge / app.a2a_client
     "google-cloud-aiplatform[agent_engines,adk]==1.165.1",
     "google-genai==2.31.0",
     "google-cloud-bigquery==3.46.2",
@@ -169,6 +169,8 @@ def deploy_agent(
         "SEED_BQ_DATASET": pack.bigquery_dataset or "",
         "ENABLE_MCP_STDIO": "0",
         "AGENT_RUNTIME_DEPLOY": "1",
+        # Tribe A2A handshake target (Table 8 Travel Concierge); empty = advisories recorded locally only.
+        "T08_AGENT_URL": resolve_env_config("T08_AGENT_URL", default=""),
     }
 
     display_name = f"hackathon-{pack.pack_id}".replace("_", "-")
