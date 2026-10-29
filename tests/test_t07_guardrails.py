@@ -104,3 +104,51 @@ def test_loader_and_agent_attach_guardrail_callback():
     agent, _ = build_agent("t07", enable_mcp_stdio=False)
     assert agent.before_tool_callback is not None
     assert load_seed_pack("t00_example", enable_mcp_stdio=False).before_tool_callback is None
+
+
+# ---------------------------------------------------------------------------
+# Review fix pass: cross-incident / injection-flagged rollbacks, arg normalisation, audit logging
+# ---------------------------------------------------------------------------
+
+
+def test_rollback_citing_a_closed_incident_is_rejected():
+    from seed_packs.t07_self_healing_ops.tools import correlate_incident
+
+    allowed = json.loads(correlate_incident("INC-0036"))["policy"]["allowed_rollback_target"]  # MITIGATED incident
+    res = before_tool_callback(
+        _Tool("execute_canary_rollback"),
+        {"incident_id": "INC-0036", "service_name": "checkout-payment-svc", "target_stable_version": allowed, "reason": "x"},
+        None,
+    )
+    assert res["status"] == "REJECTED_BY_GUARDRAIL" and "MITIGATED" in res["reason"]
+
+
+def test_rollback_on_injection_flagged_incident_is_rejected():
+    from seed_packs.t07_self_healing_ops.tools import correlate_incident
+
+    allowed = json.loads(correlate_incident("INC-0019"))["policy"]["allowed_rollback_target"]
+    res = before_tool_callback(
+        _Tool("execute_canary_rollback"),
+        {"incident_id": "INC-0019", "service_name": "realtime-pricing-engine", "target_stable_version": allowed, "reason": "x"},
+        None,
+    )
+    assert res["status"] == "REJECTED_BY_GUARDRAIL" and "injection" in res["reason"].lower()
+
+
+def test_scale_normalises_target_replicas_in_place():
+    args = {"service_name": "auth-token-gateway", "cluster_region": "europe-west1", "target_replicas": "12.0"}
+    assert before_tool_callback(_Tool("scale_service_replicas"), args, None) is None
+    assert args["target_replicas"] == 12 and isinstance(args["target_replicas"], int)
+
+
+def test_guardrail_rejection_is_logged_for_cloud_logging(caplog):
+    import logging
+
+    with caplog.at_level(logging.WARNING):
+        res = before_tool_callback(
+            _Tool("scale_service_replicas"),
+            {"service_name": "auth-token-gateway", "cluster_region": "europe-west1", "target_replicas": 0},
+            None,
+        )
+    messages = [rec.getMessage() for rec in caplog.records]
+    assert any("GUARDRAIL_REJECTED" in m and res["guardrail_event_id"] in m for m in messages), messages

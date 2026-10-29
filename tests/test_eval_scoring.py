@@ -42,3 +42,19 @@ def test_loader_reads_case_level_forbidden_tools(tmp_path: Path):
     eval_set, cases = load_eval_cases(f)
     assert eval_set is not None  # still a valid ADK EvalSet
     assert cases[0].forbidden_tools == ["scale_service_replicas"]
+
+
+def test_omitted_arg_is_filled_from_tool_default_before_matching():
+    from eval.run_eval import tool_arg_defaults
+
+    def annotate(incident_id: str, remediation_summary: str, new_status: str = "MITIGATED") -> str:
+        return ""
+
+    defaults = tool_arg_defaults([annotate, object()])  # non-callables (e.g. McpToolset) are skipped
+    assert defaults == {"annotate": {"new_status": "MITIGATED"}}
+    exp = [{"name": "annotate", "args": {"incident_id": "INC-0001", "new_status": "ESCALATED"}}]
+    act = [{"name": "annotate", "args": {"incident_id": "INC-0001", "remediation_summary": "x"}}]
+    # The model left new_status to its default (MITIGATED): that is NOT an ESCALATED annotation.
+    assert score_tool_trajectory(exp, act, defaults=defaults) == 0.0
+    assert score_tool_trajectory([{"name": "annotate", "args": {"new_status": "MITIGATED"}}], act, defaults=defaults) == 1.0
+    assert score_tool_trajectory(exp, act) == 1.0  # legacy lenient behaviour when no defaults are supplied

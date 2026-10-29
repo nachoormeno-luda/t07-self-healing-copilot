@@ -16,6 +16,8 @@ steps:
       - "AGENT_RUNTIME_LOCATION=europe-west1"
       - "SEED_PACK=${_SEED_PACK}"
       - "BQ_LOCATION=EU"
+      # Tribe A2A target; empty values are dropped by deploy.py, set _T08_AGENT_URL to keep it on the engine.
+      - "T08_AGENT_URL=${_T08_AGENT_URL}"
     args:
       - "-c"
       - |
@@ -31,6 +33,7 @@ steps:
 substitutions:
   _SEED_PACK: "t07"
   _AGENT_RESOURCE: ""
+  _T08_AGENT_URL: ""
 timeout: "1800s"
 options:
   logging: CLOUD_LOGGING_ONLY

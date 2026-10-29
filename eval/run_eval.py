@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 from dataclasses import dataclass, field
+import inspect
 import json
 import os
 from pathlib import Path
@@ -204,6 +205,30 @@ def _read_forbidden_tools(source: dict[str, Any] | None) -> list[str]:
 FREE_TEXT_ARGS: frozenset[str] = frozenset({"reason", "remediation_summary", "impact_summary"})
 
 
+def tool_arg_defaults(tools: list[Any]) -> dict[str, dict[str, Any]]:
+    """Map tool name -> {param: default} for plain function tools (toolsets are skipped).
+
+    An argument the model omits still reaches the tool as its default, so the scorer must
+    compare that default against the golden case (e.g. `new_status` defaulting to MITIGATED
+    is not an ESCALATED annotation).
+    """
+    defaults: dict[str, dict[str, Any]] = {}
+    for tool in tools:
+        if not callable(tool):
+            continue
+        try:
+            params = inspect.signature(tool).parameters
+        except (TypeError, ValueError):
+            continue
+        name = getattr(tool, "__name__", None)
+        if not name:
+            continue
+        defaults[name] = {
+            p.name: p.default for p in params.values() if p.default is not inspect.Parameter.empty
+        }
+    return defaults
+
+
 def _normalize_arg(value: Any) -> str:
     text = str(value).strip().casefold()
     try:
@@ -225,13 +250,16 @@ def _args_compatible(expected_args: dict[str, Any], actual_args: dict[str, Any])
 def score_tool_trajectory(
     expected_tools: list[dict[str, Any]],
     actual_tools: list[dict[str, Any]],
+    defaults: dict[str, dict[str, Any]] | None = None,
 ) -> float:
     """Compute tool trajectory match score in [0.0, 1.0].
 
     An expected tool matches when some actual call has the same name AND every
     expected argument that is present in that call compares equal (free-text
-    arguments excluded). Expected arguments the model left to their defaults are
-    not penalised; present-but-different ones are.
+    arguments excluded). When `defaults` (from `tool_arg_defaults`) is supplied,
+    arguments the model omitted are filled with the tool's defaults first, so an
+    omitted argument is judged by the value the tool really ran with. Without
+    `defaults`, omitted arguments are not penalised.
     """
     if not expected_tools:
         return 1.0
@@ -239,11 +267,13 @@ def score_tool_trajectory(
     for exp in expected_tools:
         exp_name = exp.get("name")
         exp_args = exp.get("args") or {}
-        if any(
-            act.get("name") == exp_name and _args_compatible(exp_args, act.get("args") or {})
-            for act in actual_tools
-        ):
-            matched += 1
+        for act in actual_tools:
+            if act.get("name") != exp_name:
+                continue
+            act_args = {**(defaults or {}).get(str(act.get("name")), {}), **(act.get("args") or {})}
+            if _args_compatible(exp_args, act_args):
+                matched += 1
+                break
     return round(matched / len(expected_tools), 4)
 
 
@@ -300,6 +330,7 @@ async def run_live_evaluation(
     # Run evaluation with plain Python function tools for deterministic speed & reliability
     agent, pack = build_agent(pack_id=pack_id, enable_mcp_stdio=False)
     runner = InMemoryRunner(agent=agent, app_name="app")
+    arg_defaults = tool_arg_defaults(list(agent.tools or []))
 
     results: list[dict[str, Any]] = []
     for file_path in eval_files:
@@ -342,7 +373,7 @@ async def run_live_evaluation(
 
                 reply_text = "\n".join(turn_texts).strip()
                 last_reply = reply_text
-                t_score = score_tool_trajectory(turn.expected_tools, turn_tools)
+                t_score = score_tool_trajectory(turn.expected_tools, turn_tools, defaults=arg_defaults)
                 r_score = score_response_match(turn.reference_response, reply_text)
                 case_tool_scores.append(t_score)
                 case_resp_scores.append(r_score)

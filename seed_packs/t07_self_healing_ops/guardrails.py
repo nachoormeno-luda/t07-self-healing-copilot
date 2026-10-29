@@ -10,10 +10,13 @@ from BigQuery rows via `correlate_incident` / `lookup_slo_runbook`, never from l
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 from seed_packs.t07_self_healing_ops.mcp_server import record_guardrail_event
 from seed_packs.t07_self_healing_ops.tools import correlate_incident, lookup_slo_runbook
+
+logger = logging.getLogger(__name__)
 
 GUARDED_TOOLS = frozenset({"execute_canary_rollback", "scale_service_replicas"})
 
@@ -38,11 +41,22 @@ def check_rollback(args: dict[str, Any]) -> str | None:
         )
     incident = data["incident"]
     policy = data["policy"]
+    if _norm(incident.get("status")) != "open":
+        # Citing a closed incident would make its release's previous version a rollback target.
+        return (
+            f"incident {incident_id} is {incident.get('status')}, not OPEN: only an open incident "
+            "can drive a rollback"
+        )
     requested_service = str(args.get("service_name") or "").strip()
     if _norm(requested_service) != _norm(incident.get("service_name")):
         return (
             f"service mismatch: {incident_id} belongs to {incident.get('service_name')}, "
             f"not {requested_service or '(empty)'}"
+        )
+    if incident.get("injection_suspected"):
+        return (
+            f"incident {incident_id} carries a suspected prompt injection in its log text; "
+            "automated rollback refused, escalate for human review"
         )
     if not policy.get("rollback_safe"):
         return f"release {incident.get('active_release_id')} is not marked rollback_safe"
@@ -73,6 +87,8 @@ def check_scale(args: dict[str, Any]) -> str | None:
         return f"target_replicas={args.get('target_replicas')!r} is not a number"
     if target < lo or target > hi:
         return f"target_replicas={target} is outside the runbook corridor [{lo}, {hi}] for {service}"
+    # ADK hands this same dict to the tool: pass the normalised int on so "12.0" cannot crash int().
+    args["target_replicas"] = target
     return None
 
 
@@ -101,6 +117,11 @@ def before_tool_callback(tool: Any, args: dict[str, Any], tool_context: Any) -> 
         event_id = record_guardrail_event(name, _json_safe(args), reason)["event_id"]
     except Exception as exc:  # the refusal stands even if the audit write fails
         event_id = f"GUARD-UNRECORDED ({type(exc).__name__})"
+    # Structured line for Cloud Logging (Agent Runtime / Cloud Run): the audit trail the jury can see.
+    logger.warning(
+        "GUARDRAIL_REJECTED %s",
+        json.dumps({"event_id": event_id, "tool": name, "reason": reason, "args": _json_safe(args)}),
+    )
     return {
         "status": "REJECTED_BY_GUARDRAIL",
         "tool": name,
