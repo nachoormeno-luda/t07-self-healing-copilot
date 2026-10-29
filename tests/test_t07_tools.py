@@ -128,3 +128,10 @@ def test_notify_reports_timeouts_by_type_and_uses_a_realistic_timeout(monkeypatc
     out = json.loads(asyncio.run(t07tools.notify_travel_concierge("INC-0001", "checkout-payment-svc", "x")))
     assert out["status"] == "ERROR" and out["error"].startswith("TimeoutError")
     assert seen["timeout_s"] >= 60  # a real agent round trip (Gemini + BigQuery) takes well over 20 s
+
+
+def test_correlate_incident_requires_incident_id():
+    import inspect
+
+    param = inspect.signature(correlate_incident).parameters["incident_id"]
+    assert param.default is inspect.Parameter.empty  # a default would let the model silently triage INC-0001

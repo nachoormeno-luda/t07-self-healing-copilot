@@ -224,7 +224,7 @@ def _correlation_payload(
     return json.dumps(payload, default=str)
 
 
-def correlate_incident(incident_id: str = "INC-0001") -> str:
+def correlate_incident(incident_id: str) -> str:
     """Correlate one incident with its active deployment release and governing SLO runbook in a single BigQuery JOIN.
 
     Args:
