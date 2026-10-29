@@ -230,11 +230,19 @@ def tool_arg_defaults(tools: list[Any]) -> dict[str, dict[str, Any]]:
 
 
 def _normalize_arg(value: Any) -> str:
+    """Canonical text for comparing a golden arg with the model's: numbers compare numerically
+    ("12" == 12 == 12.0 == "12.0") but version-like strings stay text ("2.10" != "2.1")."""
+    if isinstance(value, bool):
+        return str(value).casefold()
+    if isinstance(value, (int, float)):
+        return repr(float(value))
     text = str(value).strip().casefold()
-    try:
-        return repr(float(text))  # "12" == 12 == 12.0
-    except ValueError:
-        return text
+    if re.fullmatch(r"-?\d+", text):
+        return repr(float(text))
+    if re.fullmatch(r"-?\d+\.\d+", text):
+        as_float = repr(float(text))
+        return as_float if as_float == text else text  # "12.0" coerces, "2.10" stays text
+    return text
 
 
 def _args_compatible(expected_args: dict[str, Any], actual_args: dict[str, Any]) -> bool:

@@ -62,3 +62,11 @@ def test_env_vars_include_t08_url_when_set(monkeypatch: pytest.MonkeyPatch, depl
     dep.deploy_agent(pack_id="t07", state_file=state, check_bucket=False)
     assert fake.kwargs["env_vars"]["T08_AGENT_URL"] == "http://t08.test"
     assert "a2a" in " ".join(fake.kwargs["requirements"])  # a2a-sdk must ship in the container
+
+
+def test_a2a_sdk_is_pinned_everywhere():
+    import deploy.deploy as dep
+
+    assert "a2a-sdk==1.3.0" in dep.PINNED_REQUIREMENTS
+    assert "a2a-sdk==1.3.0" in Path("pyproject.toml").read_text(encoding="utf-8")
+    assert "a2a-sdk==1.3.0" in Path("requirements.txt").read_text(encoding="utf-8")

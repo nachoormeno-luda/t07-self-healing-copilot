@@ -23,3 +23,6 @@ agent_engine_deploy_src/
 
 # Local mock state runtime files
 seed_packs/*/.state.json
+
+# Agent-execution scratch (plan ledgers, review packages)
+.superpowers/

@@ -14,7 +14,7 @@ import logging
 from typing import Any
 
 from seed_packs.t07_self_healing_ops.mcp_server import record_guardrail_event
-from seed_packs.t07_self_healing_ops.tools import correlate_incident, lookup_slo_runbook
+from seed_packs.t07_self_healing_ops.tools import correlate_incident, service_replica_corridor
 
 logger = logging.getLogger(__name__)
 
@@ -35,8 +35,9 @@ def check_rollback(args: dict[str, Any]) -> str | None:
     incident_id = str(args.get("incident_id") or "").strip()
     data = json.loads(correlate_incident(incident_id))
     if data.get("status") != "SUCCESS":
+        detail = f": {data['error']}" if data.get("error") else ""
         return (
-            f"unknown incident '{incident_id}' ({data.get('status')}): "
+            f"could not correlate incident '{incident_id}' ({data.get('status')}{detail}); "
             "rollbacks require an incident that correlates to a release"
         )
     incident = data["incident"]
@@ -74,13 +75,10 @@ def check_rollback(args: dict[str, Any]) -> str | None:
 def check_scale(args: dict[str, Any]) -> str | None:
     """Return a rejection reason for `scale_service_replicas` args, or None when allowed."""
     service = str(args.get("service_name") or "").strip()
-    data = json.loads(lookup_slo_runbook(service, "all"))
-    runbooks = data.get("runbooks") or []
-    if data.get("status") != "SUCCESS" or not runbooks:
+    corridor = service_replica_corridor(service)  # strictest corridor over ALL runbooks of the service
+    if not corridor:
         return f"no SLO runbook defines a replica corridor for service '{service}'"
-    # Strictest corridor across the service's runbooks.
-    lo = max(int(float(b["min_safe_replicas"])) for b in runbooks)
-    hi = min(int(float(b["max_safe_replicas"])) for b in runbooks)
+    lo, hi = corridor["min"], corridor["max"]
     try:
         target = int(float(args.get("target_replicas")))
     except (TypeError, ValueError):

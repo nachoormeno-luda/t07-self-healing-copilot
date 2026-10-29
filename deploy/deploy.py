@@ -32,7 +32,8 @@ STATE_FILE = REPO_ROOT / ".deployed_agent.json"
 # Pinned requirements matching the Python 3.12 workstation environment to
 # prevent cloudpickle deserialization skew inside Agent Runtime containers.
 PINNED_REQUIREMENTS = [
-    "google-adk[a2a]==2.11.0",  # [a2a] extra: a2a-sdk for notify_travel_concierge / app.a2a_client
+    "google-adk[a2a]==2.11.0",  # [a2a] extra: a2a-sdk for notify_travel_concierge / a2a_client
+    "a2a-sdk==1.3.0",  # pinned explicitly: ADK allows >=0.3.4,<2 and 0.3.x has a different API
     "google-cloud-aiplatform[agent_engines,adk]==1.165.1",
     "google-genai==2.31.0",
     "google-cloud-bigquery==3.46.2",
