@@ -76,3 +76,22 @@ def test_client_timeout_bounds_connect_separately():
     t = _client_timeout(90)
     assert t.connect == 5.0 and t.read == 90.0
     assert _client_timeout(3).connect == 3.0
+
+
+def test_reasoning_engine_url_falls_back_to_a2a_when_cross_project_iam_denied(
+    monkeypatch: pytest.MonkeyPatch, echo_server: str
+):
+    import seed_packs.t07_self_healing_ops.a2a_client as mod
+
+    async def _denied(_resource: str, _text: str) -> str:
+        raise PermissionError("403 PERMISSION_DENIED on expedition-dn26lon-5921")
+
+    monkeypatch.setattr(mod, "_query_reasoning_engine", _denied)
+    monkeypatch.setenv("T08_FALLBACK_A2A_URL", echo_server)
+    re_url = (
+        "https://europe-west1-aiplatform.googleapis.com/v1/"
+        "projects/expedition-dn26lon-5921/locations/europe-west1/reasoningEngines/5598468017542397952:query"
+    )
+    reply = asyncio.run(send_a2a_text(re_url, "advisory for INC-0001", timeout_s=10))
+    assert "echo:advisory for INC-0001" in reply
+

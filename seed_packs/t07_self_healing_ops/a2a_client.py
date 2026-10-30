@@ -9,12 +9,17 @@ in the SDK.
 from __future__ import annotations
 
 import asyncio
+import os
+import re
 from typing import Any
 from uuid import uuid4
 
 import httpx
 from a2a.client import ClientConfig, ClientFactory
 import a2a.types as a2a_types
+
+_RE_ENGINE_RE = re.compile(r"(projects/[^/]+/locations/[^/]+/reasoningEngines/\d+)")
+_DEFAULT_T08_A2A_FALLBACK = "https://t08-travel-concierge-816403371995.europe-west1.run.app"
 
 
 def _client_timeout(timeout_s: float) -> httpx.Timeout:
@@ -54,6 +59,20 @@ def _texts_from(obj: Any) -> list[str]:
     return texts
 
 
+async def _query_reasoning_engine(resource_name: str, text: str) -> str:
+    """Query a Vertex AI Reasoning Engine resource directly using ADC credentials."""
+    from vertexai import agent_engines
+
+    remote = agent_engines.get(resource_name)
+    chunks: list[str] = []
+    async for event in remote.async_stream_query(user_id="t07-sre-copilot", message=text):
+        content = event.get("content") if isinstance(event, dict) else None
+        for part in (content or {}).get("parts") or []:
+            if isinstance(part, dict) and part.get("text"):
+                chunks.append(str(part["text"]))
+    return "\n".join(chunks).strip()
+
+
 async def send_a2a_text(
     agent_url: str,
     text: str,
@@ -63,15 +82,16 @@ async def send_a2a_text(
 ) -> str:
     """Resolve the agent card at `agent_url`, send `text` as a user message, return the reply text.
 
-    `agent_url` is the agent's base URL (the SDK appends `/.well-known/agent-card.json`).
+    `agent_url` is the agent's base URL (the SDK appends `/.well-known/agent-card.json`), or a
+    Vertex AI Reasoning Engine endpoint (`.../projects/.../locations/.../reasoningEngines/<id>:query`).
     Returns an empty string when the agent replied without any text part.
     """
     own_client = httpx_client is None
     http = httpx_client or httpx.AsyncClient(timeout=_client_timeout(timeout_s))
     try:
-        async def _exchange() -> str:
+        async def _exchange_a2a(target_url: str) -> str:
             factory = ClientFactory(ClientConfig(streaming=False, httpx_client=http))
-            client = await factory.create_from_url(agent_url.rstrip("/"))
+            client = await factory.create_from_url(target_url.rstrip("/"))
             request = a2a_types.SendMessageRequest(
                 message=a2a_types.Message(
                     message_id=str(uuid4()),
@@ -86,6 +106,18 @@ async def send_a2a_text(
                         if chunk not in collected:
                             collected.append(chunk)
             return "\n".join(collected).strip()
+
+        async def _exchange() -> str:
+            re_match = _RE_ENGINE_RE.search(agent_url or "")
+            if re_match:
+                try:
+                    return await _query_reasoning_engine(re_match.group(1), text)
+                except Exception:
+                    fallback = os.environ.get("T08_FALLBACK_A2A_URL", _DEFAULT_T08_A2A_FALLBACK).strip()
+                    if fallback and not _RE_ENGINE_RE.search(fallback):
+                        return await _exchange_a2a(fallback)
+                    raise
+            return await _exchange_a2a(agent_url)
 
         return await asyncio.wait_for(_exchange(), timeout=timeout_s)
     finally:
