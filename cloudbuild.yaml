@@ -27,6 +27,7 @@ steps:
         .venv/bin/pytest -q
         .venv/bin/python -m eval.run_eval --pack "${_SEED_PACK}" --validate-only
         .venv/bin/python -m eval.run_eval --pack "${_SEED_PACK}"
+        rm -f seed_packs/*/.state.json
         test -n "${_AGENT_RESOURCE}" || { echo "ERROR: pass _AGENT_RESOURCE=<reasoningEngines resource name>; refusing to create a second engine"; exit 1; }
         echo "{\"resource_name\": \"${_AGENT_RESOURCE}\", \"project_id\": \"$PROJECT_ID\"}" > .deployed_agent.json
         .venv/bin/python -m deploy.deploy --pack "${_SEED_PACK}"
