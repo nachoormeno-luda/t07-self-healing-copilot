@@ -4,12 +4,12 @@
 - **Scored Deployment (Vertex AI Agent Runtime)**: `projects/816403371995/locations/europe-west1/reasoningEngines/8703699960614354944` (`expedition-dn26lon-5906`, `europe-west1`)
 - **Table 7 A2A Server (Cloud Run, `min-instances=1`)**: `https://t07-sre-copilot-816403371995.europe-west1.run.app` (`/.well-known/agent-card.json`)
 - **Table 8 A2A Target (`T08_AGENT_URL`)**: `https://europe-west1-aiplatform.googleapis.com/v1/projects/expedition-dn26lon-5921/locations/europe-west1/reasoningEngines/5598468017542397952:query` (with automatic A2A JSON-RPC 1.0 fallback to `https://t08-travel-concierge-816403371995.europe-west1.run.app`, `min-instances=1`)
-- **Pitch Deck (5 slides — Hero's Journey, 16:9)**: [`docs/pitch/table7-self-healing-copilot.pptx`](pitch/table7-self-healing-copilot.pptx) · [`docs/pitch/table7-self-healing-copilot.pdf`](pitch/table7-self-healing-copilot.pdf)
-  - **Slide 1 (`1. IMPACT`)**: Hero's Journey (`Liam O'Connor`, 3:00 AM SEV-1) & Business Impact (`€14,500/min` burn, `42m` MTTR, `INC-0019` injection trap)
-  - **Slide 2 (`2. SOLUTION`)**: Identification of 4 Naive-AI Failure Modes & 3-Pillar Solution Idea (1-JOIN Grounding, `before_tool_callback`, Tribe A2A Mesh)
-  - **Slide 3 (`3. BUILD`)**: Implementation on Google Cloud (`seed_t07`, `gemini-3.8-flash`, `reasoningEngines/8703699960614354944`) & Agentic SDLC (`agy`, 14 PRs, Cloud Build `334194d3`)
-  - **Slide 4 (`4. RESULTS`)**: Measured Results (`5/9 → 9/9` golden eval, `64/64` tests, `42m → 20.0s` MTTR `-99%`, `100%` blocked injections)
-  - **Slide 5 (`5. CLOSING`)**: Yesterday's Learnings (Agentic Productivity, **Work Hard & Party Hard**, Google Cloud Platform) & **`€2.4M / year` Saved** (`1,800+ hrs/yr` toil cut)
+- **Pitch Deck (5 slides, 16:9)**: [`docs/pitch/table7-self-healing-copilot.pptx`](pitch/table7-self-healing-copilot.pptx) · [`docs/pitch/table7-self-healing-copilot.pdf`](pitch/table7-self-healing-copilot.pdf)
+  - **Slide 1 (`01 · OUTAGE`)**: 03:00 AM SEV-1 Outage (`Liam O'Connor`) & Business Impact (`€14,500/min` burn, `42m` MTTR, `INC-0019` poisoned log)
+  - **Slide 2 (`02 · DEFENSE`)**: Root-Cause Analysis (4 Failure Modes) & 3-Layer Zero-Trust Architecture (1-JOIN Grounding, `before_tool_callback`, Tribe A2A Mesh)
+  - **Slide 3 (`03 · PLATFORM`)**: Production Control Plane on Google Cloud (`seed_t07`, `gemini-3.8-flash`, `reasoningEngines/8703699960614354944`) & Agentic SDLC (`agy`, 14 PRs, Cloud Build `334194d3`)
+  - **Slide 4 (`04 · BENCHMARKS`)**: Live Production Benchmarks (`5/9 → 9/9` golden eval, `64/64` tests, `42m → 20.0s` MTTR `-99%`, `100%` blocked injections)
+  - **Slide 5 (`05 · ROI`)**: Executive Summary (Agentic Productivity, **Work Hard & Party Hard**, Google Cloud Platform) & **`€2.4M / year` Saved** (`1,800+ hrs/yr` toil cut)
 - **Golden Evaluation Artifact (`9/9`, `100.0%`)**: [`docs/eval/2026-10-30-golden-eval.txt`](eval/2026-10-30-golden-eval.txt)
 
 ---
