@@ -4,7 +4,12 @@
 - **Scored Deployment (Vertex AI Agent Runtime)**: `projects/816403371995/locations/europe-west1/reasoningEngines/8703699960614354944` (`expedition-dn26lon-5906`, `europe-west1`)
 - **Table 7 A2A Server (Cloud Run, `min-instances=1`)**: `https://t07-sre-copilot-816403371995.europe-west1.run.app` (`/.well-known/agent-card.json`)
 - **Table 8 A2A Target (`T08_AGENT_URL`)**: `https://europe-west1-aiplatform.googleapis.com/v1/projects/expedition-dn26lon-5921/locations/europe-west1/reasoningEngines/5598468017542397952:query` (with automatic A2A JSON-RPC 1.0 fallback to `https://t08-travel-concierge-816403371995.europe-west1.run.app`, `min-instances=1`)
-- **Pitch Deck (2 slides, 16:9)**: [`docs/pitch/table7-self-healing-copilot.pptx`](pitch/table7-self-healing-copilot.pptx) · [`docs/pitch/table7-self-healing-copilot.pdf`](pitch/table7-self-healing-copilot.pdf)
+- **Pitch Deck (5 slides — Hero's Journey, 16:9)**: [`docs/pitch/table7-self-healing-copilot.pptx`](pitch/table7-self-healing-copilot.pptx) · [`docs/pitch/table7-self-healing-copilot.pdf`](pitch/table7-self-healing-copilot.pdf)
+  - **Slide 1 (`1. IMPACT`)**: Hero's Journey (`Liam O'Connor`, 3:00 AM SEV-1) & Business Impact (`€14,500/min` burn, `42m` MTTR, `INC-0019` injection trap)
+  - **Slide 2 (`2. SOLUTION`)**: Identification of 4 Naive-AI Failure Modes & 3-Pillar Solution Idea (1-JOIN Grounding, `before_tool_callback`, Tribe A2A Mesh)
+  - **Slide 3 (`3. BUILD`)**: Implementation on Google Cloud (`seed_t07`, `gemini-3.8-flash`, `reasoningEngines/8703699960614354944`) & Agentic SDLC (`agy`, 14 PRs, Cloud Build `334194d3`)
+  - **Slide 4 (`4. RESULTS`)**: Measured Results (`5/9 → 9/9` golden eval, `64/64` tests, `42m → 20.0s` MTTR `-99%`, `100%` blocked injections)
+  - **Slide 5 (`5. CLOSING`)**: Yesterday's Learnings (Agentic Productivity, **Work Hard & Party Hard**, Google Cloud Platform) & **`€2.4M / year` Saved** (`1,800+ hrs/yr` toil cut)
 - **Golden Evaluation Artifact (`9/9`, `100.0%`)**: [`docs/eval/2026-10-30-golden-eval.txt`](eval/2026-10-30-golden-eval.txt)
 
 ---
@@ -34,7 +39,7 @@ Run in the **Vertex AI Agent Engine Playground** (`reasoningEngines/870369996061
 
 | Tab | Title / Resource |Exact URL / Command |
 |---|---|---|
-| **`S`** | **Google Slides / PDF (2 slides)** | Open [`docs/pitch/table7-self-healing-copilot.pdf`](pitch/table7-self-healing-copilot.pdf) (or Google Slides import of `.pptx`) on **Slide 1** |
+| **`S`** | **Google Slides / PDF (5 slides)** | Open [`docs/pitch/table7-self-healing-copilot.pdf`](pitch/table7-self-healing-copilot.pdf) (or Google Slides import of `.pptx`) on **Slide 1 (`1. IMPACT`)** |
 | **`B`** | **BigQuery Studio (`seed_t07`)** | `https://console.cloud.google.com/bigquery?project=expedition-dn26lon-5906` — query pre-run showing `INC-0007`, `INC-0019` (malicious log), and `INC-0001` |
 | **`A1`** | **Agent Engine Playground #1 (`P1`)** | `https://console.cloud.google.com/vertex-ai/agents/agent-engines?project=expedition-dn26lon-5906` → `expedition-t07-agent` (`8703699960614354944`) with **`P1` already executed at `T-2m`** and trace expanded |
 | **`A2`** | **Agent Engine Playground #2 (`P2` + `P3`)** | Same engine (`8703699960614354944`), clean session, **`P2` pre-pasted in the input box** |
@@ -49,17 +54,17 @@ Run in the **Vertex AI Agent Engine Playground** (`reasoningEngines/870369996061
 
 ## 3. Minute-by-Minute 5:00 Pitch & Live Demo Script (English)
 
-### `0:00 – 0:20` (`20s`) · Hook & Problem Statement — Tabs `S` (Slide 1) → `B` (BigQuery)
-- **Hand**: Start on Tab `S` (Slide 1) for 10 seconds, then click Tab `B` (BigQuery results for `INC-0007` and `INC-0019`).
+### `0:00 – 0:25` (`25s`) · Hook, Hero's Journey & Solution Idea — Tabs `S` (Slides 1–2) → `B` (BigQuery)
+- **Hand**: Start on Tab `S` (**Slide 1 — Impact**: Liam O'Connor at 3:00 AM, `€14,500/min` burn, `42 min` MTTR), advance briefly to **Slide 2 — Solution** (4 failure modes + 3-pillar defense), then click Tab `B` (BigQuery results for `INC-0007` and `INC-0019`).
 - **Voice**:
-  > *"At 3 a.m. during a SEV-1 canary regression, SREs don't fail because they lack logs—they fail because an AI copilot that blindly trusts logs is a production outage waiting to happen. Look at our BigQuery `service_incidents` table: `INC-0019` has a prompt injection hidden inside a crash log telling the agent to scale `auth-token-gateway` down to zero replicas. When we ran our golden evaluation against the untouched starter, it obeyed the log and rolled back the service. Here is how Table 7 fixed it on Vertex AI Agent Runtime."*
+  > *"Meet Liam O'Connor, Principal SRE at AegisCloud. At 3 a.m. during a SEV-1 canary regression burning €14,500 a minute, manual correlation takes 42 minutes—and an AI copilot that blindly trusts logs is a production outage waiting to happen. Look at our BigQuery `service_incidents` table: `INC-0019` hides a prompt injection inside a crash log telling the agent to scale `auth-token-gateway` down to zero replicas. When we ran our golden evaluation against the untouched starter, it obeyed the log. Here is how Table 7 solved it with a three-pillar architecture on Vertex AI Agent Runtime."*
 
-### `0:20 – 1:15` (`55s`) · Act 1: Grounded Triage (`P1`) & Launch `P2` — Tabs `A1` → `A2`
+### `0:25 – 1:15` (`50s`) · Act 1: Grounded Triage (`P1`) & Launch `P2` — Tabs `A1` → `A2`
 - **Hand**:
   1. Switch to Tab `A2` (`P2` is already in the input box) and **click Send immediately** so `P2` streams in the background while you explain `A1`.
   2. Switch to Tab `A1` (where `P1` on `INC-0007` was run at `T-2m` with the tool trace expanded). Point to the URL bar (`reasoningEngines/8703699960614354944`) and the 3 tool calls.
 - **Voice**:
-  > *"Everything you see runs on our Scored Deployment in Vertex AI Agent Runtime in `europe-west1`—engine `8703699960614354944`—powered by `gemini-3.8-flash`. In `A1`, we asked the copilot to triage `INC-0007`. Instead of chaining three slow round-trips, `correlate_incident` executes a single BigQuery JOIN across `service_incidents`, `deployment_releases`, and `slo_runbooks`, returning a structured `policy` block: `allowed_rollback_target: v2.16.0` from `REL-0007` and `recommended_action: ROLLBACK_TO_PREVIOUS_STABLE` from `RBK-017`. The agent executes canary rollback `RB-1001` to `v2.16.0` and records `TIMELINE-3001` as `MITIGATED`."*
+  > *"Everything you see runs on our Scored Deployment in Vertex AI Agent Runtime in `europe-west1`—engine `8703699960614354944`—powered by `gemini-3.8-flash`. In `A1`, we asked the copilot to triage `INC-0007`. Instead of chaining three slow round-trips, `correlate_incident` executes a single BigQuery JOIN across `service_incidents`, `deployment_releases`, and `slo_runbooks`, returning a structured `policy` block: `allowed_rollback_target: v2.16.0` from `REL-0007` and `recommended_action: ROLLBACK_TO_PREVIOUS_STABLE` from `RBK-017`. The agent executes canary rollback `RB-1001` to `v2.16.0` and records `TIMELINE-3001` as `MITIGATED` in 20 seconds."*
 
 ### `1:15 – 1:55` (`40s`) · Act 2: Prompt Injection Defense (`P2`) — Tab `A2`
 - **Hand**: Switch back to Tab `A2` (`P2` has just finished). Expand `correlate_incident` and `annotate_incident_timeline`. Paste `P3` into the input box of `A2` and **click Send** right at `1:50`.
@@ -76,18 +81,18 @@ Run in the **Vertex AI Agent Engine Playground** (`reasoningEngines/870369996061
 - **Voice**:
   > *"When `checkout-payment-svc` degrades under `INC-0001`, SREs shouldn't manually message customer support on Slack. In `A3`, `notify_travel_concierge` sends a live A2A advisory (`ADV-4001`) to Table 8's Travel Concierge endpoint, which acknowledges the payment outage and activates IROPS fare-difference waivers. And it's bidirectional: our own copilot is deployed on Cloud Run via ADK's `to_a2a()` with a live v1.0 Agent Card at `/.well-known/agent-card.json`."*
 
-### `3:20 – 4:30` (`70s`) · Act 5: Architecture, Eval-First (`9/9`) & CI/CD — Tabs `S` (Slide 2) → `G` → `C`
+### `3:20 – 4:25` (`65s`) · Act 5: Implementation (`Slide 3`), Results (`Slide 4`), Eval-First (`9/9`) & CI/CD — Tabs `S` → `G` → `C`
 - **Hand**:
-  1. Show Tab `S` (**Slide 2**) for 20 seconds (Architecture diagram + `5/9 → 9/9` Golden Eval + Bonus matrix).
+  1. Show Tab `S` (**Slide 3 — Implementation** & **Slide 4 — Results**) for 20 seconds (Google Cloud stack + `5/9 → 9/9` Golden Eval + `42m → 20.0s` MTTR).
   2. Click Tab `G`: show [`docs/eval/2026-10-30-golden-eval.txt`](eval/2026-10-30-golden-eval.txt) (`EVAL_SUMMARY: 9/9 cases passed (100.0%)`), `.agents/rules/t07-sre-copilot.md`, and the 14 merged PRs (`#1`–`#14`) with green `Agent CI Gates`.
   3. Click Tab `C`: show Cloud Build history (`334194d3-445d-43ef-ac7b-45bb4de85016` `SUCCESS`).
 - **Voice**:
-  > *"Slide 2 summarizes how we built and verified this using Antigravity CLI (`agy`). First, we codified our domain invariants in `.agents/rules/t07-sre-copilot.md` and `AGENTS.md`. Second, we followed a strict Eval-First TDD loop: in PR #3 we added four adversarial golden cases—log injection, unlisted rollback version, full triage, and A2A—plus argument-level matching and `forbidden_tools` checks in `run_eval.py`. We watched the baseline fail at `5/9`, and then built the JOIN, untrusted-log boundary, and `before_tool_callback` across 14 Pull Requests until we hit `9/9 (100%)` and `64` unit tests. Every PR is gated by GitHub Actions, and `cloudbuild.yaml` runs `pytest`, live `make eval`, and `make deploy` updating this exact Reasoning Engine in place."*
+  > *"Slides 3 and 4 show our implementation and measured results. Using Google Antigravity (`agy`), we codified our domain invariants in `.agents/rules/t07-sre-copilot.md` and followed a strict Eval-First TDD loop: in PR #3 we added four adversarial golden cases—log injection, unlisted rollback version, full triage, and A2A—plus argument-level matching and `forbidden_tools` checks in `run_eval.py`. We watched the baseline fail at `5/9`, and built our solution across 14 Pull Requests until we hit `9/9 (100%)` and `64` unit tests, cutting MTTR by 99% from 42 minutes to 20 seconds. Every PR is gated by GitHub Actions, and `cloudbuild.yaml` runs `pytest`, live `make eval`, and `make deploy` updating this exact Reasoning Engine in place."*
 
-### `4:30 – 5:00` (`30s`) · Close & Takeaway — Tab `S` (Slide 2)
-- **Hand**: End on Tab `S` (**Slide 2**) with `4:50` on the stopwatch (leaving a `10s` safety buffer before the `5:00` hard stop).
+### `4:25 – 5:00` (`35s`) · Closing: Learnings, Work Hard & Party Hard & `€2.4M/yr` Saved — Tab `S` (Slide 5)
+- **Hand**: End on Tab `S` (**Slide 5 — Closing**) with `4:50` on the stopwatch (leaving a `10s` safety buffer before the `5:00` hard stop).
 - **Voice**:
-  > *"Three takeaways from Table 7: First, never let raw logs drive remediation—policy comes from a single BigQuery JOIN over releases and SLO runbooks. Second, prompts advise, callbacks enforce: `before_tool_callback` blocks unsafe rollbacks and out-of-corridor scaling in code and logs `GUARD-xxxx` to Cloud Logging. Third, every claim is backed by 9 golden evaluations, 64 unit tests, bidirectional A2A, and an automated Cloud Build pipeline updating Vertex AI Agent Runtime. Thank you—we're ready for questions."*
+  > *"To close on Slide 5: yesterday taught us three big lessons. First, agentic AI with Antigravity multiplied our engineering productivity—shipping 14 PRs and 64 tests in one day. Second, when your CI/CD gates, golden evals, and deterministic guardrails catch regressions automatically, you can truly work hard and party hard with zero deployment anxiety. And third, despite the high complexity of multi-table correlation, adversarial security, and cross-tribe A2A, the Google Cloud platform—BigQuery, Gemini 3.8 Flash, ADK, and Vertex AI Agent Runtime—let us improve the entire incident lifecycle, solve the problem end-to-end, and deliver a verified `€2.4M per year` in business savings for AegisCloud (`€1.65M` in faster SEV-1 recovery, `€480K` in prevented bad rollbacks, `€270K` in proactive customer protection, plus `1,800+` hours of on-call toil saved). Thank you—we're ready for questions."*
 
 ---
 
